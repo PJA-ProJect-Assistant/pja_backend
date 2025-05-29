@@ -31,6 +31,7 @@ public class JwtTokenProvider {
 
         return Jwts.builder()
                 .setSubject(uid)
+                //.claim("id", id)
                 .claim("role", role)
                 .setIssuedAt(now)
                 .setExpiration(expiry)
@@ -45,6 +46,15 @@ public class JwtTokenProvider {
         } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
+    }
+
+    public Long getId(String token) {
+        return Jwts.parserBuilder()
+                .setSigningKey(key)
+                .build()
+                .parseClaimsJws(token)
+                .getBody()
+                .get("id", Long.class);
     }
 
     public String getUid(String token) {

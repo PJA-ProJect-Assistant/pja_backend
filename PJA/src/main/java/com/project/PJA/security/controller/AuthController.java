@@ -4,17 +4,16 @@ import com.project.PJA.common.dto.SuccessResponse;
 import com.project.PJA.security.dto.LoginDto;
 import com.project.PJA.security.jwt.JwtTokenProvider;
 import com.project.PJA.security.service.AuthUserService;
+import com.project.PJA.security.service.CustomUserDetailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.authentication.*;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @RestController
@@ -26,6 +25,7 @@ public class AuthController {
     private final UserDetailsService userDetailsService;
     private final StringRedisTemplate redisTemplate;
     private final AuthUserService authUserService;
+    private final CustomUserDetailService customUserDetailService;
 
     @PostMapping("/login")
     public SuccessResponse<?> login(@RequestBody LoginDto loginDto) {
@@ -45,12 +45,16 @@ public class AuthController {
         if (!jwtTokenProvider.validateToken(refreshToken)) return ResponseEntity.status(401).build();
 
         String uid = jwtTokenProvider.getUid(refreshToken);
+        //Long id = jwtTokenProvider.getId(refreshToken);
         String storedToken = redisTemplate.opsForValue().get("RT:" + uid);
+        //String storedToken = redisTemplate.opsForValue().get("RT:" + id);
 
         if (storedToken == null || !storedToken.equals(refreshToken)) return ResponseEntity.status(401).build();
 
         UserDetails user = userDetailsService.loadUserByUsername(uid);
+        //UserDetails user = customUserDetailService.loadUserById(id);
         String newAccessToken = jwtTokenProvider.createToken(uid, user.getAuthorities().iterator().next().getAuthority());
+        //String newAccessToken = jwtTokenProvider.createToken(id, user.getAuthorities().iterator().next().getAuthority());
 
         return ResponseEntity.ok().body(Map.of("accessToken", newAccessToken));
     }

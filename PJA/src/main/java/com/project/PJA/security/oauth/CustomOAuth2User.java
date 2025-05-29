@@ -11,11 +11,13 @@ public class CustomOAuth2User implements OAuth2User {
 
     private final OAuth2User oAuth2User;
     private final String uid;  // 사용자 고유 식별자
+    //private final Long id;  // 사용자 고유 식별자
     private final String role;
 
     public CustomOAuth2User(OAuth2User oAuth2User, String uid) {
         this.oAuth2User = oAuth2User;
         this.uid = uid;
+        //this.id = id;
         this.role = UserRole.ROLE_USER.toString();
     }
 
@@ -37,6 +39,10 @@ public class CustomOAuth2User implements OAuth2User {
     public String getUid() {
         return uid;
     }
+
+    /*public Long getId() {
+        return id;
+    }*/
 
     public String getEmail() {
         return (String) oAuth2User.getAttributes().get("email");

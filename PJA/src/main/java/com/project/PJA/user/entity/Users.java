@@ -2,7 +2,6 @@ package com.project.PJA.user.entity;
 
 import jakarta.annotation.Nullable;
 import jakarta.persistence.*;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -17,6 +16,7 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @Entity
+@Table(name = "users")
 public class Users implements UserDetails {
 
     @Id

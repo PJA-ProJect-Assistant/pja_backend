@@ -6,7 +6,9 @@ import com.project.PJA.security.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.security.authentication.*;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.stereotype.Service;
@@ -23,6 +25,7 @@ public class AuthUserService {
     private final UserDetailsService userDetailsService;
     private final JwtTokenProvider jwtTokenProvider;
     private final StringRedisTemplate redisTemplate;
+    private final CustomUserDetailService customUserDetailService;
 
     public Map<Object, Object> login(LoginDto loginDto) {
         String uid = loginDto.getUid();
@@ -40,9 +43,13 @@ public class AuthUserService {
 
         log.info("uid는 " + uid);
         log.info("password는 " + password);
+
+        //Users user = customUserDetailService.findEntityByUid(uid);
         UserDetails user = userDetailsService.loadUserByUsername(uid);
         String accessToken = jwtTokenProvider.createToken(uid, user.getAuthorities().iterator().next().getAuthority());
+        //String accessToken = jwtTokenProvider.createToken(user.getUser_id(), user.getAuthorities().iterator().next().getAuthority());
         String refreshToken = jwtTokenProvider.createToken(uid, "REFRESH");
+        //String refreshToken = jwtTokenProvider.createToken(user.getUser_id(), "REFRESH");
 
         redisTemplate.opsForValue().set("RT:" + uid, refreshToken, 7, TimeUnit.DAYS);
 

@@ -1,5 +1,6 @@
 package com.project.PJA.security.jwt;
 
+import com.project.PJA.security.service.CustomUserDetailService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -19,10 +20,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final UserDetailsService userDetailsService;
+    private final CustomUserDetailService customUserDetailService;
 
-    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider, UserDetailsService userDetailsService) {
+    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider, UserDetailsService userDetailsService, CustomUserDetailService customUserDetailService) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.userDetailsService = userDetailsService;
+        this.customUserDetailService = customUserDetailService;
     }
 
     // 인증 예외로 허용할 경로들
@@ -70,7 +73,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (token != null && jwtTokenProvider.validateToken(token)) {
             String uid = jwtTokenProvider.getUid(token); // 토큰에서 사용자 식별(uid)를 추출
+            //Long id = jwtTokenProvider.getId(token);
             UserDetails userDetails = userDetailsService.loadUserByUsername(uid); // db에서 사용자 정보 조회
+            //UserDetails userDetails = customUserDetailService.loadUserById(id);
 
             // 인증 객체 생성
             UsernamePasswordAuthenticationToken auth =
