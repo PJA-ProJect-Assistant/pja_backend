@@ -197,6 +197,8 @@ public class ApiService {
 
             List<Api> savedApis = apiRepository.saveAll(apiEntities);
 
+            //foundWorkspace.updateProgressStep(ProgressStep.FOUR);
+
             return savedApis.stream()
                     .map(api -> new ApiResponse(
                             api.getApiId(),
