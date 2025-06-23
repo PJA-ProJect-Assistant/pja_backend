@@ -10,4 +10,5 @@ import lombok.NoArgsConstructor;
 public class TechStackData {
     private Long techStackId;
     private String content;
+    private Long version;
 }

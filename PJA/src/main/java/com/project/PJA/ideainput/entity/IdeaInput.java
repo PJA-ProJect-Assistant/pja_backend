@@ -34,12 +34,16 @@ public class IdeaInput {
     @Column(name = "project_description", columnDefinition = "TEXT")
     private String projectDescription;
 
+    @Version
+    private Long version;
+
     @Builder
     public IdeaInput(Workspace workspace, String projectName, String projectTarget, String projectDescription) {
         this.workspace = workspace;
         this.projectName = projectName;
         this.projectTarget = projectTarget;
         this.projectDescription = projectDescription;
+        this.version = 0L;
     }
 
     public void update(String projectName, String projectTarget, String projectDescription) {

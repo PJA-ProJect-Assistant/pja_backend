@@ -10,4 +10,5 @@ import lombok.NoArgsConstructor;
 public class MainFunctionData {
     private Long mainFunctionId;
     private String content;
+    private Long version;
 }

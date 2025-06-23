@@ -27,10 +27,14 @@ public class MainFunction {
     @Column(name = "content")
     private String content;
 
+    @Version
+    private Long version;
+
     @Builder
     public MainFunction(IdeaInput ideaInput, String content) {
         this.ideaInput = ideaInput;
         this.content = content;
+        this.version = 0L;
     }
 
     public void update(String content) {

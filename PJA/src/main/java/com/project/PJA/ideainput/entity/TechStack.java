@@ -27,10 +27,14 @@ public class TechStack {
     @Column(name = "content", columnDefinition = "TEXT")
     private String content;
 
+    @Version
+    private Long version;
+
     @Builder
     public TechStack(IdeaInput ideaInput, String content) {
         this.ideaInput = ideaInput;
         this.content = content;
+        this.version = 0L;
     }
 
     public void update(String content) {
