@@ -53,14 +53,16 @@ public class IdeaInputService {
         List<MainFunctionData> mainFunctionDataList = foundMainFunctions.stream()
                 .map(mainFunction -> new MainFunctionData(
                         mainFunction.getMainFunctionId(),
-                        mainFunction.getContent()
+                        mainFunction.getContent(),
+                        mainFunction.getVersion()
                 ))
                 .collect(Collectors.toList());
 
         List<TechStackData> techStackDataList = foundTechStacks.stream()
                 .map(techStack -> new TechStackData(
                         techStack.getTechStackId(),
-                        techStack.getContent()
+                        techStack.getContent(),
+                        techStack.getVersion()
                 ))
                 .collect(Collectors.toList());
 
@@ -70,7 +72,8 @@ public class IdeaInputService {
                 foundIdeaInput.getProjectTarget(),
                 mainFunctionDataList,
                 techStackDataList,
-                foundIdeaInput.getProjectDescription()
+                foundIdeaInput.getProjectDescription(),
+                foundIdeaInput.getVersion()
         );
     }
 
@@ -114,13 +117,15 @@ public class IdeaInputService {
         List<MainFunctionData> mainFunctionList = Arrays.asList(savedMainFunction1, savedMainFunction2).stream()
                 .map(mainFunction -> new MainFunctionData(
                         mainFunction.getMainFunctionId(),
-                        mainFunction.getContent()))
+                        mainFunction.getContent(),
+                        mainFunction.getVersion()))
                 .collect(Collectors.toList());
 
         List<TechStackData> techStackList = Arrays.asList(savedTechStack1, savedTechStack2).stream()
                 .map(techStack -> new TechStackData(
                         techStack.getTechStackId(),
-                        techStack.getContent()))
+                        techStack.getContent(),
+                        techStack.getVersion()))
                 .collect(Collectors.toList());
 
         return new IdeaInputResponse(
@@ -129,7 +134,8 @@ public class IdeaInputService {
                 savedIdeaInput.getProjectTarget(),
                 mainFunctionList,
                 techStackList,
-                savedIdeaInput.getProjectDescription()
+                savedIdeaInput.getProjectDescription(),
+                savedIdeaInput.getVersion()
         );
     }
     
@@ -147,7 +153,8 @@ public class IdeaInputService {
 
         return new MainFunctionData(
                 savedMainFunction.getMainFunctionId(),
-                savedMainFunction.getContent()
+                savedMainFunction.getContent(),
+                savedMainFunction.getVersion()
         );
     }
 
@@ -163,7 +170,8 @@ public class IdeaInputService {
 
         return new MainFunctionData(
                 mainFunctionId,
-                foundMainFunction.getContent()
+                foundMainFunction.getContent(),
+                foundMainFunction.getVersion()
         );
     }
     
@@ -181,7 +189,8 @@ public class IdeaInputService {
 
         return new TechStackData(
                 savedTechStack.getTechStackId(),
-                savedTechStack.getContent()
+                savedTechStack.getContent(),
+                savedTechStack.getVersion()
         );
     }
 
@@ -197,7 +206,8 @@ public class IdeaInputService {
 
         return new TechStackData(
                 techStackId,
-                foundTechStack.getContent()
+                foundTechStack.getContent(),
+                foundTechStack.getVersion()
         );
     }
 
@@ -236,11 +246,18 @@ public class IdeaInputService {
             throw new BadRequestException("아이디어 입력이 요청하신 워크스페이스에 속하지 않습니다.");
         }
 
+        if (!foundIdeaInput.getVersion().equals(ideaInputRequest.getVersion())) {
+            throw new BadRequestException("이미 다른 사용자에 의해 수정되었습니다.");
+        }
+
         foundIdeaInput.update(ideaInputRequest.getProjectName(), ideaInputRequest.getProjectTarget(), ideaInputRequest.getProjectDescription());
 
         for (MainFunctionData req : ideaInputRequest.getMainFunction()) {
             MainFunction mf = mainFunctionRepository.findById(req.getMainFunctionId())
                     .orElseThrow(() -> new NotFoundException("요청하신 ID가 " + req.getMainFunctionId() + "인 메인 기능을 찾을 수 없습니다."));
+            if (!mf.getVersion().equals(req.getVersion())) {
+                throw new BadRequestException("이미 다른 사용자에 의해 수정되었습니다.");
+            }
             if (!mf.getIdeaInput().getIdeaInputId().equals(ideaInputId)) {
                 throw new BadRequestException("요청하신 메인 기능이 현재 아이디어에 속하지 않습니다.");
             }

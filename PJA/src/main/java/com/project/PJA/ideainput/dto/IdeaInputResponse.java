@@ -16,4 +16,5 @@ public class IdeaInputResponse {
     private List<MainFunctionData> mainFunction;
     private List<TechStackData> techStack;
     private String projectDescription;
+    private Long version;
 }
