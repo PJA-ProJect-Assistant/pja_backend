@@ -49,72 +49,71 @@ public class IdeaInputService {
     @Transactional(readOnly = true)
     public IdeaInputResponse getIdeaInput(Long userId, Long workspaceId) {
         String key = "workspace:" + workspaceId + ":ideaInput";
-        String cacheInput = redisTemplate.opsForValue().get(key);
 
-        if (cacheInput != null) {
-            IdeaInputResponse ideaInputResponse = getIdeaInputFromCache(userId, workspaceId);
-            if (ideaInputResponse != null) {
-                return ideaInputResponse;
+        IdeaInputResponse ideaInputResponse = getIdeaInputFromCache(userId, workspaceId);
+        if (ideaInputResponse != null) {
+            return ideaInputResponse;
+        }
+
+        synchronized (this) {
+            Workspace foundWorkspace = workspaceRepository.findById(workspaceId)
+                    .orElseThrow(() -> new NotFoundException("요청하신 워크스페이스를 찾을 수 없습니다."));
+
+            workspaceService.validateWorkspaceAccess(userId, foundWorkspace);
+
+            IdeaInput foundIdeaInput = ideaInputRepository.findByWorkspace_WorkspaceId(workspaceId)
+                    .orElseThrow(() -> new NotFoundException("요청하신 아이디어 입력을 찾을 수 없습니다."));
+            List<MainFunction> foundMainFunctions = mainFunctionRepository.findAllByIdeaInput_IdeaInputId(foundIdeaInput.getIdeaInputId());
+            List<TechStack> foundTechStacks = techStackRepository.findAllByIdeaInput_IdeaInputId(foundIdeaInput.getIdeaInputId());
+
+            List<MainFunctionData> mainFunctionDataList = foundMainFunctions.stream()
+                    .map(mainFunction -> new MainFunctionData(
+                            mainFunction.getMainFunctionId(),
+                            mainFunction.getContent()
+                    ))
+                    .collect(Collectors.toList());
+
+            List<TechStackData> techStackDataList = foundTechStacks.stream()
+                    .map(techStack -> new TechStackData(
+                            techStack.getTechStackId(),
+                            techStack.getContent()
+                    ))
+                    .collect(Collectors.toList());
+
+            IdeaInputResponse response = new IdeaInputResponse(
+                    foundIdeaInput.getIdeaInputId(),
+                    foundIdeaInput.getProjectName(),
+                    foundIdeaInput.getProjectTarget(),
+                    mainFunctionDataList,
+                    techStackDataList,
+                    foundIdeaInput.getProjectDescription());
+
+            try {
+                String jsonToCache = objectMapper.writeValueAsString(response);
+                redisTemplate.opsForValue().set(key, jsonToCache, Duration.ofHours(9));
+            } catch (JsonProcessingException e) {
+                log.error("아이디어 입력 데이터 Redis 캐싱 중 오류 발생. workspaceId: {}", workspaceId, e);
             }
+
+            return response;
         }
-
-        Workspace foundWorkspace = workspaceRepository.findById(workspaceId)
-                .orElseThrow(() -> new NotFoundException("요청하신 워크스페이스를 찾을 수 없습니다."));
-
-        workspaceService.validateWorkspaceAccess(userId, foundWorkspace);
-
-        IdeaInput foundIdeaInput = ideaInputRepository.findByWorkspace_WorkspaceId(workspaceId)
-                .orElseThrow(() -> new NotFoundException("요청하신 아이디어 입력을 찾을 수 없습니다."));
-        List<MainFunction> foundMainFunctions = mainFunctionRepository.findAllByIdeaInput_IdeaInputId(foundIdeaInput.getIdeaInputId());
-        List<TechStack> foundTechStacks = techStackRepository.findAllByIdeaInput_IdeaInputId(foundIdeaInput.getIdeaInputId());
-
-        List<MainFunctionData> mainFunctionDataList = foundMainFunctions.stream()
-                .map(mainFunction -> new MainFunctionData(
-                        mainFunction.getMainFunctionId(),
-                        mainFunction.getContent()
-                ))
-                .collect(Collectors.toList());
-
-        List<TechStackData> techStackDataList = foundTechStacks.stream()
-                .map(techStack -> new TechStackData(
-                        techStack.getTechStackId(),
-                        techStack.getContent()
-                ))
-                .collect(Collectors.toList());
-
-        IdeaInputResponse response = new IdeaInputResponse(
-                foundIdeaInput.getIdeaInputId(),
-                foundIdeaInput.getProjectName(),
-                foundIdeaInput.getProjectTarget(),
-                mainFunctionDataList,
-                techStackDataList,
-                foundIdeaInput.getProjectDescription());
-
-        try {
-            String jsonToCache = objectMapper.writeValueAsString(response);
-            redisTemplate.opsForValue().set(key, jsonToCache, Duration.ofHours(9));
-        } catch (JsonProcessingException e) {
-            log.error("아이디어 입력 데이터 Redis 캐싱 중 오류 발생. workspaceId: {}", workspaceId, e);
-        }
-
-        return response;
     }
 
     // 아이디어 입력 redis 조회
     public IdeaInputResponse getIdeaInputFromCache(Long userId, Long workspaceId) {
-        workspaceService.authorizeOwnerOrMemberOrThrowFromCache(userId, workspaceId);
+        workspaceService.validateWorkspaceAccessFromCache(userId, workspaceId);
         String key = "workspace:" + workspaceId + ":ideaInput";
-        String cacheInput = redisTemplate.opsForValue().get(key);
+        String cacheIdeaInput = redisTemplate.opsForValue().get(key);
 
-        if (cacheInput == null) {
+        if (cacheIdeaInput == null) {
             return null;
         }
 
         try {
-            return objectMapper.readValue(cacheInput, IdeaInputResponse.class);
+            return objectMapper.readValue(cacheIdeaInput, IdeaInputResponse.class);
         } catch (JsonProcessingException e) {
-            log.error("아이디어 입력 캐시 데이터 역직렬화 실패 - key: {}, data: {}", key, cacheInput, e);
-            throw new RuntimeException("아이디어 입력 데이터를 불러오는 데 실패했습니다.", e);
+            log.error("아이디어 입력 캐시 데이터 역직렬화 실패 - key: {}, data: {}", key, cacheIdeaInput, e);
+            return null;
         }
     }
 
