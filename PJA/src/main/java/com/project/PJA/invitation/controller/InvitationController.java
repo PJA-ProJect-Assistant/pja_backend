@@ -6,11 +6,13 @@ import com.project.PJA.invitation.dto.InvitationInfoResponse;
 import com.project.PJA.invitation.service.InvitationService;
 import com.project.PJA.user.entity.Users;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/invitations")
 @RequiredArgsConstructor
@@ -22,6 +24,8 @@ public class InvitationController {
     public ResponseEntity<SuccessResponse<InvitationInfoResponse>> getInvitationInfo(@AuthenticationPrincipal Users user,
                                                                                      @RequestParam String token) {
         Long userId = user.getUserId();
+        log.info("=== 초대 링크 정보 조회 API 진입 == userId: {}", userId);
+
         InvitationInfoResponse invitationInfo = invitationService.getInvitationInfo(userId, token);
 
         SuccessResponse<InvitationInfoResponse> response = new SuccessResponse<>(
@@ -36,6 +40,8 @@ public class InvitationController {
     public ResponseEntity<SuccessResponse<InvitationDecisionResponse>> acceptInvitation(@AuthenticationPrincipal Users user,
                                                                                         @PathVariable String token) {
         Long userId = user.getUserId();
+        log.info("=== 팀원 초대 수락 API 진입 == userId: {}", userId);
+        
         InvitationDecisionResponse acceptInvitation = invitationService.acceptInvitation(user, token);
 
         SuccessResponse<InvitationDecisionResponse> response = new SuccessResponse<>(
@@ -50,6 +56,8 @@ public class InvitationController {
     public ResponseEntity<SuccessResponse<InvitationDecisionResponse>> declineInvitation(@AuthenticationPrincipal Users user,
                                                                                          @PathVariable String token) {
         Long userId = user.getUserId();
+        log.info("=== 팀원 초대 거절 API 진입 == userId: {}", userId);
+        
         InvitationDecisionResponse declineInvitation = invitationService.declineInvitation(userId, token);
 
         SuccessResponse<InvitationDecisionResponse> response = new SuccessResponse<>(
