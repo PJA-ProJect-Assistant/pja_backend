@@ -28,6 +28,7 @@ import com.project.PJA.workspace_activity.enumeration.ActivityTargetType;
 import com.project.PJA.workspace_activity.service.WorkspaceActivityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,6 +36,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.RestTemplate;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -51,6 +53,7 @@ public class ProjectInfoService {
     private final WorkspaceService workspaceService;
     private final RequirementService requirementService;
     private final ObjectMapper objectMapper = new ObjectMapper();
+    private final RedisTemplate<String, String> redisTemplate;
     private final WorkspaceActivityService workspaceActivityService;
 
     // 프로젝트 정보 전체 조회
@@ -89,23 +92,59 @@ public class ProjectInfoService {
     // 프로젝트 정보 조회
     @Transactional(readOnly = true)
     public ProjectInfoResponse getProjectInfo(Long userId, Long workspaceId) {
-        Workspace foundWorkspace = workspaceRepository.findById(workspaceId)
-                .orElseThrow(() -> new NotFoundException("요청하신 워크스페이스를 찾을 수 없습니다."));
+        ProjectInfoResponse projectInfoFromCache = getProjectInfoFromCache(userId, workspaceId);
 
-        workspaceService.validateWorkspaceAccess(userId, foundWorkspace);
+        if (projectInfoFromCache != null) {
+            return projectInfoFromCache;
+        }
 
-        ProjectInfo foundProjectInfo = projectInfoRepository.findByWorkspace_WorkspaceId(workspaceId)
-                .orElseThrow(() -> new NotFoundException("요청하신 아이디어를 찾을 수 없습니다."));
+        synchronized (this) {
+            Workspace foundWorkspace = workspaceRepository.findById(workspaceId)
+                    .orElseThrow(() -> new NotFoundException("요청하신 워크스페이스를 찾을 수 없습니다."));
 
-        return new ProjectInfoResponse(
-                foundProjectInfo.getProjectInfoId(),
-                foundProjectInfo.getTitle(),
-                foundProjectInfo.getCategory(),
-                foundProjectInfo.getTargetUsers(),
-                foundProjectInfo.getCoreFeatures(),
-                foundProjectInfo.getTechnologyStack(),
-                foundProjectInfo.getProblemSolving()
-        );
+            workspaceService.validateWorkspaceAccess(userId, foundWorkspace);
+
+            ProjectInfo foundProjectInfo = projectInfoRepository.findByWorkspace_WorkspaceId(workspaceId)
+                    .orElseThrow(() -> new NotFoundException("요청하신 아이디어를 찾을 수 없습니다."));
+
+            ProjectInfoResponse projectInfo = new ProjectInfoResponse(
+                    foundProjectInfo.getProjectInfoId(),
+                    foundProjectInfo.getTitle(),
+                    foundProjectInfo.getCategory(),
+                    foundProjectInfo.getTargetUsers(),
+                    foundProjectInfo.getCoreFeatures(),
+                    foundProjectInfo.getTechnologyStack(),
+                    foundProjectInfo.getProblemSolving()
+            );
+
+            String key = "workspace:" + workspaceId + ":projectInfo";
+            try {
+                String jsonToCache = objectMapper.writeValueAsString(projectInfo);
+                redisTemplate.opsForValue().set(key, jsonToCache, Duration.ofHours(9));
+            } catch (JsonProcessingException e) {
+                log.error("프로젝트 정보 데이터 Redis 캐싱 중 오류 발생. workspaceId: {}", workspaceId, e);
+            }
+
+            return projectInfo;
+        }
+    }
+    
+    // 프로젝트 정보 redis 조회
+    public ProjectInfoResponse getProjectInfoFromCache(Long userId, Long workspaceId) {
+        workspaceService.validateWorkspaceAccessFromCache(userId, workspaceId);
+        String key = "workspace:" + workspaceId + ":projectInfo";
+        String cacheProjectInfo = redisTemplate.opsForValue().get(key);
+
+        if (cacheProjectInfo == null) {
+            return null;
+        }
+
+        try {
+            return objectMapper.readValue(cacheProjectInfo, ProjectInfoResponse.class);
+        } catch (JsonProcessingException e) {
+            log.error("프로젝트 정보 캐시 데이터 역직렬화 실패 - key: {}, data: {}", key, cacheProjectInfo, e);
+            return null;
+        }
     }
 
     // 프로젝트 정보 AI 생성
@@ -238,6 +277,8 @@ public class ProjectInfoService {
                 request.getProblemSolving()
                 );
 
+        invalidateProjectInfoCache(workspaceId);
+
         // 최근 활동 기록 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.PROJECT_INFO, ActivityActionType.UPDATE);
 
@@ -250,5 +291,9 @@ public class ProjectInfoService {
                 request.getTechnologyStack(),
                 request.getProblemSolving()
         );
+    }
+
+    private void invalidateProjectInfoCache(Long workspaceId) {
+        redisTemplate.delete("workspace:" + workspaceId + ":projectInfo");
     }
 }
