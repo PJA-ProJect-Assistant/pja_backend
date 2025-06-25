@@ -1,5 +1,7 @@
 package com.project.PJA.ideainput.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project.PJA.exception.BadRequestException;
 import com.project.PJA.exception.NotFoundException;
 import com.project.PJA.ideainput.dto.IdeaInputRequest;
@@ -20,6 +22,8 @@ import com.project.PJA.workspace_activity.enumeration.ActivityActionType;
 import com.project.PJA.workspace_activity.enumeration.ActivityTargetType;
 import com.project.PJA.workspace_activity.service.WorkspaceActivityService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +31,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class IdeaInputService {
@@ -36,10 +41,15 @@ public class IdeaInputService {
     private final MainFunctionRepository mainFunctionRepository;
     private final TechStackRepository techStackRepository;
     private final WorkspaceActivityService workspaceActivityService;
+    private final RedisTemplate<String, String> redisTemplate;
+    private final ObjectMapper objectMapper;
 
     // 아이디어 입력 조회
     @Transactional(readOnly = true)
     public IdeaInputResponse getIdeaInput(Long userId, Long workspaceId) {
+        String key = "workspace:" + workspaceId + ":ideaInput";
+        String cacheInput = redisTemplate.opsForValue().get(key);
+
         Workspace foundWorkspace = workspaceRepository.findById(workspaceId)
                 .orElseThrow(() -> new NotFoundException("요청하신 워크스페이스를 찾을 수 없습니다."));
 
@@ -64,6 +74,21 @@ public class IdeaInputService {
                 ))
                 .collect(Collectors.toList());
 
+        IdeaInputResponse response = new IdeaInputResponse(
+                foundIdeaInput.getIdeaInputId(),
+                foundIdeaInput.getProjectName(),
+                foundIdeaInput.getProjectTarget(),
+                mainFunctionDataList,
+                techStackDataList,
+                foundIdeaInput.getProjectDescription());
+
+        try {
+            String jsonToCache = objectMapper.writeValueAsString(response);
+        } catch (JsonProcessingException e) {
+            log.error("권한 캐싱 실패",e);
+            e.printStackTrace();
+        }
+
         return new IdeaInputResponse(
                 foundIdeaInput.getIdeaInputId(),
                 foundIdeaInput.getProjectName(),
@@ -72,6 +97,13 @@ public class IdeaInputService {
                 techStackDataList,
                 foundIdeaInput.getProjectDescription()
         );
+    }
+
+    // 아이디어 입력 redis 조회
+    public void getIdeaInputFromCache(Long userId, Long workspaceId) {
+        workspaceService.authorizeOwnerOrMemberOrThrowFromCache(userId, workspaceId);
+        String key = "workspace:" + workspaceId + ":ideaInput";
+        String cacheInput = redisTemplate.opsForValue().get(key);
     }
 
     // 아이디어 입력 초기 생성
