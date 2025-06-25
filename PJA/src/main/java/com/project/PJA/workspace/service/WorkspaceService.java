@@ -422,7 +422,8 @@ public class WorkspaceService {
             String json = objectMapper.writeValueAsString(cacheValue);
             redisTemplate.opsForValue().set(key, json, Duration.ofHours(9)); // 9시간 TTL
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("Redis 저장 실패", e);
+            log.error("Redis에 workspace 팀원 저장 실패 - key: {}", key, e);
+            throw new RuntimeException("팀원 정보를 저장하는데 실패했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
     }
 
@@ -459,8 +460,8 @@ public class WorkspaceService {
                 }
             }
         } catch (Exception e) {
-            log.error("권한 캐시 파싱 실패: key={}, data={}", key, data, e);
-            throw new RuntimeException("권한 캐시 파싱 실패", e);
+            log.error("워크스페이스 권한 확인 중 Redis 조회 실패 - key: {}", key, e);
+            throw new RuntimeException("팀원 확인하는데 실패했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
     }
     
@@ -504,8 +505,8 @@ public class WorkspaceService {
         } catch (ForbiddenException e) {
             throw e;
         } catch (Exception e) {
-            log.error("권한 캐시 파싱 실패: key={}, data={}", key, data, e);
-            throw new RuntimeException("권한 캐시 파싱 실패", e);
+            log.error("워크스페이스 권한 확인 중 Redis 조회 실패 - key: {}", key, e);
+            throw new RuntimeException("워크스페이스 권한 정보를 확인하는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.", e);
         }
     }
 
