@@ -38,6 +38,7 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -52,7 +53,7 @@ public class ProjectInfoService {
     private final RestTemplate restTemplate;
     private final WorkspaceService workspaceService;
     private final RequirementService requirementService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     private final RedisTemplate<String, String> redisTemplate;
     private final WorkspaceActivityService workspaceActivityService;
 
@@ -98,7 +99,7 @@ public class ProjectInfoService {
             return projectInfoFromCache;
         }
 
-        synchronized (this) {
+        synchronized (getLockForWorkspace(workspaceId)) {
             Workspace foundWorkspace = workspaceRepository.findById(workspaceId)
                     .orElseThrow(() -> new NotFoundException("요청하신 워크스페이스를 찾을 수 없습니다."));
 
@@ -295,5 +296,11 @@ public class ProjectInfoService {
 
     private void invalidateProjectInfoCache(Long workspaceId) {
         redisTemplate.delete("workspace:" + workspaceId + ":projectInfo");
+    }
+
+    private final ConcurrentHashMap<Long, Object> lockMap = new ConcurrentHashMap<>();
+
+    private Object getLockForWorkspace(Long workspaceId) {
+        return lockMap.computeIfAbsent(workspaceId, k -> new Object());
     }
 }

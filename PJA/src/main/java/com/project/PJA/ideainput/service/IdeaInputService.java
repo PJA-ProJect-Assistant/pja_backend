@@ -30,6 +30,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -55,7 +56,7 @@ public class IdeaInputService {
             return ideaInputResponse;
         }
 
-        synchronized (this) {
+        synchronized (getLockForWorkspace(workspaceId)) {
             Workspace foundWorkspace = workspaceRepository.findById(workspaceId)
                     .orElseThrow(() -> new NotFoundException("요청하신 워크스페이스를 찾을 수 없습니다."));
 
@@ -334,5 +335,11 @@ public class IdeaInputService {
 
     private void invalidateIdeaInputCache(Long workspaceId) {
         redisTemplate.delete("workspace:" + workspaceId + ":ideaInput");
+    }
+
+    private final ConcurrentHashMap<Long, Object> lockMap = new ConcurrentHashMap<>();
+
+    private Object getLockForWorkspace(Long workspaceId) {
+        return lockMap.computeIfAbsent(workspaceId, k -> new Object());
     }
 }
