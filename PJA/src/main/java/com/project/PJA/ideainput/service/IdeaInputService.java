@@ -27,6 +27,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -49,6 +50,13 @@ public class IdeaInputService {
     public IdeaInputResponse getIdeaInput(Long userId, Long workspaceId) {
         String key = "workspace:" + workspaceId + ":ideaInput";
         String cacheInput = redisTemplate.opsForValue().get(key);
+
+        if (cacheInput != null) {
+            IdeaInputResponse ideaInputResponse = getIdeaInputFromCache(userId, workspaceId);
+            if (ideaInputResponse != null) {
+                return ideaInputResponse;
+            }
+        }
 
         Workspace foundWorkspace = workspaceRepository.findById(workspaceId)
                 .orElseThrow(() -> new NotFoundException("요청하신 워크스페이스를 찾을 수 없습니다."));
@@ -84,26 +92,30 @@ public class IdeaInputService {
 
         try {
             String jsonToCache = objectMapper.writeValueAsString(response);
+            redisTemplate.opsForValue().set(key, jsonToCache, Duration.ofHours(9));
         } catch (JsonProcessingException e) {
-            log.error("권한 캐싱 실패",e);
-            e.printStackTrace();
+            log.error("아이디어 입력 데이터 Redis 캐싱 중 오류 발생. workspaceId: {}", workspaceId, e);
         }
 
-        return new IdeaInputResponse(
-                foundIdeaInput.getIdeaInputId(),
-                foundIdeaInput.getProjectName(),
-                foundIdeaInput.getProjectTarget(),
-                mainFunctionDataList,
-                techStackDataList,
-                foundIdeaInput.getProjectDescription()
-        );
+        return response;
     }
 
     // 아이디어 입력 redis 조회
-    public void getIdeaInputFromCache(Long userId, Long workspaceId) {
+    public IdeaInputResponse getIdeaInputFromCache(Long userId, Long workspaceId) {
         workspaceService.authorizeOwnerOrMemberOrThrowFromCache(userId, workspaceId);
         String key = "workspace:" + workspaceId + ":ideaInput";
         String cacheInput = redisTemplate.opsForValue().get(key);
+
+        if (cacheInput == null) {
+            return null;
+        }
+
+        try {
+            return objectMapper.readValue(cacheInput, IdeaInputResponse.class);
+        } catch (JsonProcessingException e) {
+            log.error("아이디어 입력 캐시 데이터 역직렬화 실패 - key: {}, data: {}", key, cacheInput, e);
+            throw new RuntimeException("아이디어 입력 데이터를 불러오는 데 실패했습니다.", e);
+        }
     }
 
     // 아이디어 입력 초기 생성
@@ -173,6 +185,7 @@ public class IdeaInputService {
         
         workspaceService.authorizeOwnerOrMemberOrThrow(userId, workspaceId, "이 워크스페이스에 생성할 권한이 없습니다.");
 
+        invalidateIdeaInputCache(workspaceId);
         MainFunction savedMainFunction = mainFunctionRepository.save(
                 MainFunction.builder().ideaInput(foundIdeaInput).content("").build()
         );
@@ -191,6 +204,7 @@ public class IdeaInputService {
         MainFunction foundMainFunction = mainFunctionRepository.findById(mainFunctionId)
                 .orElseThrow(() -> new NotFoundException("요청하신 메인 기능을 찾을 수 없습니다."));
 
+        invalidateIdeaInputCache(workspaceId);
         mainFunctionRepository.delete(foundMainFunction);
 
         return new MainFunctionData(
@@ -207,6 +221,7 @@ public class IdeaInputService {
 
         workspaceService.authorizeOwnerOrMemberOrThrow(userId, workspaceId, "이 워크스페이스에 생성할 권한이 없습니다.");
 
+        invalidateIdeaInputCache(workspaceId);
         TechStack savedTechStack = techStackRepository.save(
                 TechStack.builder().ideaInput(foundIdeaInput).content("").build()
         );
@@ -225,6 +240,7 @@ public class IdeaInputService {
         TechStack foundTechStack = techStackRepository.findById(techStackId)
                 .orElseThrow(() -> new NotFoundException("요청하신 기술 스택을 찾을 수 없습니다."));
 
+        invalidateIdeaInputCache(workspaceId);
         techStackRepository.delete(foundTechStack);
 
         return new TechStackData(
@@ -288,6 +304,8 @@ public class IdeaInputService {
             ts.update(req.getContent());
         }
 
+        invalidateIdeaInputCache(workspaceId);
+
         // 최근 활동 기록 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.IDEA, ActivityActionType.UPDATE);
 
@@ -313,5 +331,9 @@ public class IdeaInputService {
         if (value == null || value.trim().isEmpty()) {
             throw new BadRequestException(errorMessage);
         }
+    }
+
+    private void invalidateIdeaInputCache(Long workspaceId) {
+        redisTemplate.delete("workspace:" + workspaceId + ":ideaInput");
     }
 }
