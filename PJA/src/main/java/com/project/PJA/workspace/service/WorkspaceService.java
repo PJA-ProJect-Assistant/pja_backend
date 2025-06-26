@@ -1,6 +1,7 @@
 package com.project.PJA.workspace.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project.PJA.exception.BadRequestException;
@@ -43,7 +44,7 @@ public class WorkspaceService {
     private final WorkspaceMemberRepository workspaceMemberRepository;
     private final RedisTemplate<String, String> redisTemplate;
     private final ProjectInfoRepository projectInfoRepository;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
     //private final WorkspaceActivityRepository workspaceActivityRepository;
     //private final WorkspaceActivityService workspaceActivityService;
@@ -51,6 +52,12 @@ public class WorkspaceService {
     // 사용자의 전체 워크스페이스 조회
     @Transactional(readOnly = true)
     public List<WorkspaceResponse> getMyWorkspaces(Long userId) {
+        List<WorkspaceResponse> workspaceResponses = getMyWorkspacesFromCache(userId);
+
+        if (workspaceResponses != null) {
+            return workspaceResponses;
+        }
+
         // 사용자가 참여한 워크스페이스들
         List<WorkspaceMember> participatingWorkspaces = workspaceMemberRepository.findAllByUser_UserId(userId);
 
@@ -74,7 +81,32 @@ public class WorkspaceService {
                 .collect(Collectors.toList());
         Collections.reverse(userWorkspaceList);
 
+        String key = "myWorkspaces:" + userId;
+        try {
+            String jsonToCache = objectMapper.writeValueAsString(userWorkspaceList);
+            redisTemplate.opsForValue().set(key, jsonToCache, Duration.ofHours(9));
+        } catch (JsonProcessingException e) {
+            log.error("사용자 전체 워크스페이스 데이터 Redis 캐싱 중 오류 발생. userId: {}", userId, e);
+        }
+
         return userWorkspaceList;
+    }
+
+    // 사용자의 전체 워크스페이스 redis 조회
+    public List<WorkspaceResponse> getMyWorkspacesFromCache(Long userId) {
+        String key = "myWorkspaces:" + userId;
+        String cacheMyWorkspaces = redisTemplate.opsForValue().get(key);
+
+        if (cacheMyWorkspaces == null) {
+            return null;
+        }
+
+        try {
+            return objectMapper.readValue(cacheMyWorkspaces, new TypeReference<List<WorkspaceResponse>>() {});
+        } catch (JsonProcessingException e) {
+            log.error("사용자의 전체 워크스페이스 캐시 데이터 역직렬화 실패 - userId: {}, data: {}", userId, cacheMyWorkspaces, e);
+            return null;
+        }
     }
 
     // 워크스페이스의 단일 조회
