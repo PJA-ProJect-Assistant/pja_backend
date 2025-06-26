@@ -1,6 +1,7 @@
 package com.project.PJA.user_act_log.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.project.PJA.project_progress.entity.ActionParticipant;
 import com.project.PJA.user_act_log.dto.UserActionLog;
 import com.project.PJA.user_act_log.enumeration.UserActionType;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import java.nio.file.StandardOpenOption;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.Map;
+import java.util.Set;
 
 @Slf4j
 @Service

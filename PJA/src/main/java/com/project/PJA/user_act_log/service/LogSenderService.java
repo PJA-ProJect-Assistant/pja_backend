@@ -2,6 +2,7 @@ package com.project.PJA.user_act_log.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project.PJA.actionAnalysis.service.ActionAnalysisSaveService;
+import com.project.PJA.project_progress.entity.ActionParticipant;
 import com.project.PJA.user.repository.UserRepository;
 import com.project.PJA.user_act_log.dto.UserActionLogParsing;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ import java.nio.file.Paths;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -28,10 +30,10 @@ import java.util.Objects;
 public class LogSenderService {
 
     private final UserRepository userRepository;
+
     @Value("${ml.api.url}")
     private String mlApiUrl;
 
-//    @Value("${log.path}")
     @Value("${log.dir}")
     private String logFileDir;
 
@@ -64,23 +66,17 @@ public class LogSenderService {
                 return;
             }
 
-            // logs 리스트를 JSON 문자열로 변환 (JSON array)
+            // 로그 리스트를 JSON 문자열로 변환 (JSON array)
             String logJsonArrayString = objectMapper.writeValueAsString(logs);
-
             Map<String, String> body = Map.of("user_log", logJsonArrayString);
 
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
-
             HttpEntity<Map<String, String>> request = new HttpEntity<>(body, headers);
 
             ResponseEntity<String> response = restTemplate.postForEntity(mlApiUrl, request, String.class);
             log.info("User Action 로그 전송 완료: {}", response.getStatusCode());
             log.info("응답 내용: {}", response.getBody());
-
-            // 분석 결과 DB에 저장
-//            UserActionLogParsing firstLog = logs.get(0);
-//            Long workspaceId = firstLog.getWorkspaceId();
 
             analysisSaveService.saveAnalysisResult(response.getBody(), workspaceId);
 
