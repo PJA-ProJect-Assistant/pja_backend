@@ -1,10 +1,12 @@
 package com.project.PJA.api.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.project.PJA.api.dto.*;
 import com.project.PJA.api.entity.Api;
 import com.project.PJA.api.repository.ApiRepository;
+import com.project.PJA.common.service.CommonService;
 import com.project.PJA.exception.BadRequestException;
 import com.project.PJA.exception.NotFoundException;
 import com.project.PJA.ideainput.dto.IdeaInputRequest;
@@ -32,11 +34,13 @@ import com.project.PJA.workspace_activity.enumeration.ActivityTargetType;
 import com.project.PJA.workspace_activity.service.WorkspaceActivityService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.*;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -52,31 +56,67 @@ public class ApiService {
     private final MainFunctionRepository mainFunctionRepository;
     private final TechStackRepository techStackRepository;
     private final WorkspaceService workspaceService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final CommonService commonService;
+    private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
+    private final RedisTemplate<String, String> redisTemplate;
     private final WorkspaceActivityService workspaceActivityService;
 
     // api 명세서 조회
     @Transactional(readOnly = true)
     public List<ApiResponse> getApi(Long userId, Long workspaceId) {
-        Workspace foundWorkspace = workspaceRepository.findById(workspaceId)
-                .orElseThrow(() -> new NotFoundException("요청하신 워크스페이스를 찾을 수 없습니다."));
+        List<ApiResponse> cacheApiResponses = getApiFromCache(userId, workspaceId);
+        if (cacheApiResponses != null) {
+            return cacheApiResponses;
+        }
 
-        workspaceService.validateWorkspaceAccess(userId, foundWorkspace);
+        synchronized (commonService.getLockForWorkspace("api", workspaceId)){
+            Workspace foundWorkspace = workspaceRepository.findById(workspaceId)
+                    .orElseThrow(() -> new NotFoundException("요청하신 워크스페이스를 찾을 수 없습니다."));
 
-        List<Api> apis = apiRepository.findByWorkspace_WorkspaceId(workspaceId);
+            workspaceService.validateWorkspaceAccess(userId, foundWorkspace);
 
-        return apis.stream()
-                .map(api -> new ApiResponse(
-                        api.getApiId(),
-                        api.getTitle(),
-                        api.getTag(),
-                        api.getPath(),
-                        api.getHttpMethod(),
-                        api.getRequest(),
-                        api.getResponse()
-                ))
-                .collect(Collectors.toList());
+            List<Api> apis = apiRepository.findByWorkspace_WorkspaceId(workspaceId);
+            List<ApiResponse> apiResponses = apis.stream()
+                    .map(api -> new ApiResponse(
+                            api.getApiId(),
+                            api.getTitle(),
+                            api.getTag(),
+                            api.getPath(),
+                            api.getHttpMethod(),
+                            api.getRequest(),
+                            api.getResponse()
+                    ))
+                    .collect(Collectors.toList());
+
+            String key = "workspace:" + workspaceId + ":api";
+            try {
+                String jsonToCache = objectMapper.writeValueAsString(apiResponses);
+                redisTemplate.opsForValue().set(key, jsonToCache, Duration.ofHours(9));
+            } catch (JsonProcessingException e) {
+                log.error("API 명세서 데이터 Redis 캐싱 중 오류 발생. workspaceId: {}", workspaceId, e);
+            }
+
+            return apiResponses;
+        }
+    }
+
+    // api 명세서 redis 조회
+    public List<ApiResponse> getApiFromCache(Long userId, Long workspaceId) {
+        workspaceService.validateWorkspaceAccessFromCache(userId, workspaceId);
+        String key = "workspace:" + workspaceId + ":api";
+        String cacheApi = redisTemplate.opsForValue().get(key);
+
+        if (cacheApi == null) {
+            return null;
+        }
+
+        try {
+            return objectMapper.readValue(cacheApi, new TypeReference<List<ApiResponse>>() {});
+        } catch (JsonProcessingException e) {
+            log.error("API 명세서 캐시 데이터 역직렬화 실패 - workspaceId: {}, data: {}", workspaceId, cacheApi, e);
+            return null;
+        }
     }
     
     // API 명세서 AI 생성 요청
@@ -255,6 +295,7 @@ public class ApiService {
 
         // 워크스페이스 최근 활동 데이터 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.API, ActivityActionType.CREATE);
+        commonService.invalidatePageCache(workspaceId, "api");
 
         return new ApiResponse(
                 createdApi.getApiId(),
@@ -283,9 +324,10 @@ public class ApiService {
                 apiRequest.getRequest(),
                 apiRequest.getResponse());
 
+        commonService.invalidatePageCache(workspaceId, "api");
+
         // 워크스페이스 최근 활동 데이터 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.API, ActivityActionType.UPDATE);
-
 
         return new ApiResponse(
                 foundApi.getApiId(),
@@ -307,10 +349,10 @@ public class ApiService {
         workspaceService.authorizeOwnerOrMemberOrThrow(user.getUserId(), workspaceId, "이 워크스페이스에 삭제할 권한이 없습니다.");
 
         apiRepository.delete(foundApi);
+        commonService.invalidatePageCache(workspaceId, "api");
 
         // 워크스페이스 최근 활동 데이터 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.API, ActivityActionType.DELETE);
-
 
         return new ApiResponse(
                 foundApi.getApiId(),
