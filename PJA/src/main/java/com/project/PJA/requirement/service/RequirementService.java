@@ -3,6 +3,7 @@ package com.project.PJA.requirement.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.project.PJA.common.service.CommonService;
 import com.project.PJA.exception.BadRequestException;
 import com.project.PJA.exception.NotFoundException;
 import com.project.PJA.ideainput.dto.IdeaInputRequest;
@@ -38,7 +39,6 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -51,6 +51,7 @@ public class RequirementService {
     private final MainFunctionRepository mainFunctionRepository;
     private final TechStackRepository techStackRepository;
     private final WorkspaceService workspaceService;
+    private final CommonService commonService;
     private final RestTemplate restTemplate;
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
@@ -65,7 +66,7 @@ public class RequirementService {
             return requirementsFromCache;
         }
 
-        synchronized (getLockForWorkspace(workspaceId)) {
+        synchronized (commonService.getLockForWorkspace("requirement", workspaceId)) {
             Workspace foundWorkspace = workspaceRepository.findById(workspaceId)
                     .orElseThrow(() -> new NotFoundException("요청하신 워크스페이스를 찾을 수 없습니다."));
 
@@ -83,7 +84,7 @@ public class RequirementService {
                     ))
                     .collect(Collectors.toList());
 
-            String key = "workspace:"+ workspaceId + "requirement";
+            String key = "workspace:"+ workspaceId + ":requirement";
             try {
                 String jsonToCache = objectMapper.writeValueAsString(responses);
                 redisTemplate.opsForValue().set(key, jsonToCache, Duration.ofHours(9));
@@ -98,7 +99,7 @@ public class RequirementService {
     // 요구사항 명세서 redis 조회
     public List<RequirementResponse> getRequirementFromCache(Long userId, Long workspaceId) {
         workspaceService.validateWorkspaceAccessFromCache(userId, workspaceId);
-        String key = "workspace:"+ workspaceId + "requirement";
+        String key = "workspace:"+ workspaceId + ":requirement";
         String cacheRequirement = redisTemplate.opsForValue().get(key);
 
         if (cacheRequirement == null) {
@@ -106,8 +107,7 @@ public class RequirementService {
         }
 
         try {
-            return objectMapper.readValue(cacheRequirement, new TypeReference<List<RequirementResponse>>() {
-            });
+            return objectMapper.readValue(cacheRequirement, new TypeReference<List<RequirementResponse>>() {});
         } catch (JsonProcessingException e) {
             log.error("요구사항 명세서 캐시 데이터 역직렬화 실패 - workspaceId: {}, data: {}", workspaceId, cacheRequirement, e);
             return null;
@@ -205,7 +205,7 @@ public class RequirementService {
                         .content(requirementRequest.getContent())
                         .build()
         );
-        invalidateRequirementCache(workspaceId);
+        commonService.invalidatePageCache(workspaceId, "requirement");
 
         // 최근 활동 기록 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.REQUIREMENT, ActivityActionType.CREATE);
@@ -226,7 +226,7 @@ public class RequirementService {
         workspaceService.authorizeOwnerOrMemberOrThrow(user.getUserId(), workspaceId, "이 워크스페이스에 수정할 권한이 없습니다.");
 
         foundRequirement.update(requirementContentRequest.getContent());
-        invalidateRequirementCache(workspaceId);
+        commonService.invalidatePageCache(workspaceId, "requirement");
 
         // 최근 활동 기록 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.REQUIREMENT, ActivityActionType.UPDATE);
@@ -247,7 +247,7 @@ public class RequirementService {
         workspaceService.authorizeOwnerOrMemberOrThrow(user.getUserId(), workspaceId, "이 워크스페이스에 삭제할 권한이 없습니다.");
 
         requirementRepository.delete(foundRequirement);
-        invalidateRequirementCache(workspaceId);
+        commonService.invalidatePageCache(workspaceId, "requirement");
 
         // 최근 활동 기록 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.REQUIREMENT, ActivityActionType.DELETE);
@@ -283,15 +283,5 @@ public class RequirementService {
         if (performanceCount < 3) {
             throw new BadRequestException("성능 요구사항은 최소 3개 이상 입력해야 합니다.");
         }
-    }
-
-    private void invalidateRequirementCache(Long workspaceId) {
-        redisTemplate.delete("workspace:" + workspaceId + ":requirement");
-    }
-
-    private final ConcurrentHashMap<Long, Object> lockMap = new ConcurrentHashMap<>();
-
-    private Object getLockForWorkspace(Long workspaceId) {
-        return lockMap.computeIfAbsent(workspaceId, k -> new Object());
     }
 }

@@ -2,6 +2,7 @@ package com.project.PJA.projectinfo.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.project.PJA.common.service.CommonService;
 import com.project.PJA.exception.BadRequestException;
 import com.project.PJA.exception.NotFoundException;
 import com.project.PJA.ideainput.dto.IdeaInputRequest;
@@ -38,7 +39,6 @@ import org.springframework.web.client.RestTemplate;
 
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -53,6 +53,7 @@ public class ProjectInfoService {
     private final RestTemplate restTemplate;
     private final WorkspaceService workspaceService;
     private final RequirementService requirementService;
+    private final CommonService commonService;
     private final ObjectMapper objectMapper;
     private final RedisTemplate<String, String> redisTemplate;
     private final WorkspaceActivityService workspaceActivityService;
@@ -99,7 +100,7 @@ public class ProjectInfoService {
             return projectInfoFromCache;
         }
 
-        synchronized (getLockForWorkspace(workspaceId)) {
+        synchronized (commonService.getLockForWorkspace("projectInfo", workspaceId)) {
             Workspace foundWorkspace = workspaceRepository.findById(workspaceId)
                     .orElseThrow(() -> new NotFoundException("요청하신 워크스페이스를 찾을 수 없습니다."));
 
@@ -278,7 +279,7 @@ public class ProjectInfoService {
                 request.getProblemSolving()
                 );
 
-        invalidateProjectInfoCache(workspaceId);
+        commonService.invalidatePageCache(workspaceId, "projectInfo");
 
         // 최근 활동 기록 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.PROJECT_INFO, ActivityActionType.UPDATE);
@@ -292,15 +293,5 @@ public class ProjectInfoService {
                 request.getTechnologyStack(),
                 request.getProblemSolving()
         );
-    }
-
-    private void invalidateProjectInfoCache(Long workspaceId) {
-        redisTemplate.delete("workspace:" + workspaceId + ":projectInfo");
-    }
-
-    private final ConcurrentHashMap<Long, Object> lockMap = new ConcurrentHashMap<>();
-
-    private Object getLockForWorkspace(Long workspaceId) {
-        return lockMap.computeIfAbsent(workspaceId, k -> new Object());
     }
 }

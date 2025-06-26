@@ -2,6 +2,7 @@ package com.project.PJA.ideainput.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.project.PJA.common.service.CommonService;
 import com.project.PJA.exception.BadRequestException;
 import com.project.PJA.exception.NotFoundException;
 import com.project.PJA.ideainput.dto.IdeaInputRequest;
@@ -30,7 +31,6 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -38,6 +38,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class IdeaInputService {
     private final WorkspaceService workspaceService;
+    private final CommonService commonService;
     private final WorkspaceRepository workspaceRepository;
     private final IdeaInputRepository ideaInputRepository;
     private final MainFunctionRepository mainFunctionRepository;
@@ -56,7 +57,7 @@ public class IdeaInputService {
             return ideaInputResponse;
         }
 
-        synchronized (getLockForWorkspace(workspaceId)) {
+        synchronized (commonService.getLockForWorkspace("ideaInput", workspaceId)) {
             Workspace foundWorkspace = workspaceRepository.findById(workspaceId)
                     .orElseThrow(() -> new NotFoundException("요청하신 워크스페이스를 찾을 수 없습니다."));
 
@@ -185,10 +186,10 @@ public class IdeaInputService {
         
         workspaceService.authorizeOwnerOrMemberOrThrow(userId, workspaceId, "이 워크스페이스에 생성할 권한이 없습니다.");
 
-        invalidateIdeaInputCache(workspaceId);
         MainFunction savedMainFunction = mainFunctionRepository.save(
                 MainFunction.builder().ideaInput(foundIdeaInput).content("").build()
         );
+        commonService.invalidatePageCache(workspaceId, "ideaInput");
 
         return new MainFunctionData(
                 savedMainFunction.getMainFunctionId(),
@@ -204,8 +205,8 @@ public class IdeaInputService {
         MainFunction foundMainFunction = mainFunctionRepository.findById(mainFunctionId)
                 .orElseThrow(() -> new NotFoundException("요청하신 메인 기능을 찾을 수 없습니다."));
 
-        invalidateIdeaInputCache(workspaceId);
         mainFunctionRepository.delete(foundMainFunction);
+        commonService.invalidatePageCache(workspaceId, "ideaInput");
 
         return new MainFunctionData(
                 mainFunctionId,
@@ -221,10 +222,10 @@ public class IdeaInputService {
 
         workspaceService.authorizeOwnerOrMemberOrThrow(userId, workspaceId, "이 워크스페이스에 생성할 권한이 없습니다.");
 
-        invalidateIdeaInputCache(workspaceId);
         TechStack savedTechStack = techStackRepository.save(
                 TechStack.builder().ideaInput(foundIdeaInput).content("").build()
         );
+        commonService.invalidatePageCache(workspaceId, "ideaInput");
 
         return new TechStackData(
                 savedTechStack.getTechStackId(),
@@ -240,8 +241,8 @@ public class IdeaInputService {
         TechStack foundTechStack = techStackRepository.findById(techStackId)
                 .orElseThrow(() -> new NotFoundException("요청하신 기술 스택을 찾을 수 없습니다."));
 
-        invalidateIdeaInputCache(workspaceId);
         techStackRepository.delete(foundTechStack);
+        commonService.invalidatePageCache(workspaceId, "ideaInput");
 
         return new TechStackData(
                 techStackId,
@@ -304,7 +305,7 @@ public class IdeaInputService {
             ts.update(req.getContent());
         }
 
-        invalidateIdeaInputCache(workspaceId);
+        commonService.invalidatePageCache(workspaceId, "ideaInput");
 
         // 최근 활동 기록 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.IDEA, ActivityActionType.UPDATE);
@@ -331,15 +332,5 @@ public class IdeaInputService {
         if (value == null || value.trim().isEmpty()) {
             throw new BadRequestException(errorMessage);
         }
-    }
-
-    private void invalidateIdeaInputCache(Long workspaceId) {
-        redisTemplate.delete("workspace:" + workspaceId + ":ideaInput");
-    }
-
-    private final ConcurrentHashMap<Long, Object> lockMap = new ConcurrentHashMap<>();
-
-    private Object getLockForWorkspace(Long workspaceId) {
-        return lockMap.computeIfAbsent(workspaceId, k -> new Object());
     }
 }
