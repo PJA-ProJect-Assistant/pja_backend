@@ -17,6 +17,7 @@ import com.project.PJA.requirement.dto.*;
 import com.project.PJA.requirement.entity.Requirement;
 import com.project.PJA.requirement.enumeration.RequirementType;
 import com.project.PJA.requirement.repository.RequirementRepository;
+import com.project.PJA.sse.service.SseService;
 import com.project.PJA.user.entity.Users;
 import com.project.PJA.workspace.entity.Workspace;
 import com.project.PJA.workspace.enumeration.ProgressStep;
@@ -47,8 +48,9 @@ public class RequirementService {
     private final MainFunctionRepository mainFunctionRepository;
     private final TechStackRepository techStackRepository;
     private final WorkspaceService workspaceService;
+    private final SseService sseService;
     private final RestTemplate restTemplate;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
     private final WorkspaceActivityService workspaceActivityService;
 
     // 요구사항 명세서 조회
@@ -164,6 +166,8 @@ public class RequirementService {
                         .build()
         );
 
+        sseService.notifyWorkspaceChange(workspaceId, "requirements");
+
         // 최근 활동 기록 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.REQUIREMENT, ActivityActionType.CREATE);
 
@@ -184,6 +188,8 @@ public class RequirementService {
 
         foundRequirement.update(requirementContentRequest.getContent());
 
+        sseService.notifyWorkspaceChange(workspaceId, "requirements");
+
         // 최근 활동 기록 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.REQUIREMENT, ActivityActionType.UPDATE);
 
@@ -203,6 +209,8 @@ public class RequirementService {
         workspaceService.authorizeOwnerOrMemberOrThrow(user.getUserId(), workspaceId, "이 워크스페이스에 삭제할 권한이 없습니다.");
 
         requirementRepository.delete(foundRequirement);
+
+        sseService.notifyWorkspaceChange(workspaceId, "requirements");
 
         // 최근 활동 기록 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.REQUIREMENT, ActivityActionType.DELETE);

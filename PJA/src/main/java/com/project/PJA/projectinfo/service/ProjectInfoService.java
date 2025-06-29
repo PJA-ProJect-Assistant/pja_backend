@@ -18,6 +18,7 @@ import com.project.PJA.projectinfo.entity.ProjectInfo;
 import com.project.PJA.projectinfo.repository.ProjectInfoRepository;
 import com.project.PJA.requirement.dto.RequirementRequest;
 import com.project.PJA.requirement.service.RequirementService;
+import com.project.PJA.sse.service.SseService;
 import com.project.PJA.user.entity.Users;
 import com.project.PJA.workspace.entity.Workspace;
 import com.project.PJA.workspace.enumeration.ProgressStep;
@@ -50,7 +51,8 @@ public class ProjectInfoService {
     private final RestTemplate restTemplate;
     private final WorkspaceService workspaceService;
     private final RequirementService requirementService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final SseService sseService;
+    private final ObjectMapper objectMapper;
     private final WorkspaceActivityService workspaceActivityService;
 
     // 프로젝트 정보 전체 조회
@@ -233,6 +235,8 @@ public class ProjectInfoService {
                 request.getTechnologyStack(),
                 request.getProblemSolving()
                 );
+
+        sseService.notifyWorkspaceChange(workspaceId, "project-info");
 
         // 최근 활동 기록 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.PROJECT_INFO, ActivityActionType.UPDATE);

@@ -12,6 +12,7 @@ import com.project.PJA.ideainput.entity.TechStack;
 import com.project.PJA.ideainput.repository.IdeaInputRepository;
 import com.project.PJA.ideainput.repository.MainFunctionRepository;
 import com.project.PJA.ideainput.repository.TechStackRepository;
+import com.project.PJA.sse.service.SseService;
 import com.project.PJA.user.entity.Users;
 import com.project.PJA.workspace.entity.Workspace;
 import com.project.PJA.workspace.repository.WorkspaceRepository;
@@ -31,6 +32,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class IdeaInputService {
     private final WorkspaceService workspaceService;
+    private final SseService sseService;
     private final WorkspaceRepository workspaceRepository;
     private final IdeaInputRepository ideaInputRepository;
     private final MainFunctionRepository mainFunctionRepository;
@@ -145,6 +147,8 @@ public class IdeaInputService {
                 MainFunction.builder().ideaInput(foundIdeaInput).content("").build()
         );
 
+        sseService.notifyWorkspaceChange(workspaceId, "idea-input");
+
         return new MainFunctionData(
                 savedMainFunction.getMainFunctionId(),
                 savedMainFunction.getContent()
@@ -160,6 +164,8 @@ public class IdeaInputService {
                 .orElseThrow(() -> new NotFoundException("요청하신 메인 기능을 찾을 수 없습니다."));
 
         mainFunctionRepository.delete(foundMainFunction);
+
+        sseService.notifyWorkspaceChange(workspaceId, "idea-input");
 
         return new MainFunctionData(
                 mainFunctionId,
@@ -179,6 +185,8 @@ public class IdeaInputService {
                 TechStack.builder().ideaInput(foundIdeaInput).content("").build()
         );
 
+        sseService.notifyWorkspaceChange(workspaceId, "idea-input");
+
         return new TechStackData(
                 savedTechStack.getTechStackId(),
                 savedTechStack.getContent()
@@ -194,6 +202,8 @@ public class IdeaInputService {
                 .orElseThrow(() -> new NotFoundException("요청하신 기술 스택을 찾을 수 없습니다."));
 
         techStackRepository.delete(foundTechStack);
+
+        sseService.notifyWorkspaceChange(workspaceId, "idea-input");
 
         return new TechStackData(
                 techStackId,
@@ -255,6 +265,8 @@ public class IdeaInputService {
             }
             ts.update(req.getContent());
         }
+
+        sseService.notifyWorkspaceChange(workspaceId, "idea-input");
 
         // 최근 활동 기록 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.IDEA, ActivityActionType.UPDATE);

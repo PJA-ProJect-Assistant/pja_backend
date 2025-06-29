@@ -22,6 +22,7 @@ import com.project.PJA.projectinfo.repository.ProjectInfoRepository;
 import com.project.PJA.requirement.dto.RequirementResponse;
 import com.project.PJA.requirement.entity.Requirement;
 import com.project.PJA.requirement.repository.RequirementRepository;
+import com.project.PJA.sse.service.SseService;
 import com.project.PJA.user.entity.Users;
 import com.project.PJA.workspace.entity.Workspace;
 import com.project.PJA.workspace.enumeration.ProgressStep;
@@ -52,7 +53,8 @@ public class ApiService {
     private final MainFunctionRepository mainFunctionRepository;
     private final TechStackRepository techStackRepository;
     private final WorkspaceService workspaceService;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final SseService sseService;
+    private final ObjectMapper objectMapper;
     private final RestTemplate restTemplate;
     private final WorkspaceActivityService workspaceActivityService;
 
@@ -237,6 +239,8 @@ public class ApiService {
 
         workspaceService.authorizeOwnerOrMemberOrThrow(user.getUserId(), workspaceId, "이 워크스페이스에 생성할 권한이 없습니다.");
 
+        sseService.notifyWorkspaceChange(workspaceId, "apis");
+
         Api createdApi = apiRepository.save(
                 Api.builder()
                         .workspace(foundWorkspace)
@@ -279,9 +283,10 @@ public class ApiService {
                 apiRequest.getRequest(),
                 apiRequest.getResponse());
 
+        sseService.notifyWorkspaceChange(workspaceId, "apis");
+
         // 워크스페이스 최근 활동 데이터 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.API, ActivityActionType.UPDATE);
-
 
         return new ApiResponse(
                 foundApi.getApiId(),
@@ -304,9 +309,10 @@ public class ApiService {
 
         apiRepository.delete(foundApi);
 
+        sseService.notifyWorkspaceChange(workspaceId, "apis");
+
         // 워크스페이스 최근 활동 데이터 추가
         workspaceActivityService.addWorkspaceActivity(user, workspaceId, ActivityTargetType.API, ActivityActionType.DELETE);
-
 
         return new ApiResponse(
                 foundApi.getApiId(),
