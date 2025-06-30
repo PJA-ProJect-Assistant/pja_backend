@@ -17,19 +17,6 @@ public class SseService {
     private final SseEmitterRepository sseEmitterRepository;
 
     @Async
-    public void sendEmitter(SseEmitter emitter) {
-        try {
-            emitter.send(SseEmitter.event()
-                    .name("connect")
-                    .data("SSE 연결 성공")
-                    .reconnectTime(10_000L));
-        } catch (Exception e) {
-            log.error("SSE 연결 메시지 전송 실패", e);
-            throw new RuntimeException("SSE 연결 오류가 발생했습니다.", e);
-        }
-    }
-
-    @Async
     public void notifyWorkspaceChange(Long workspaceId, String page) {
         Map<String, SseEmitter> emitters = sseEmitterRepository.getPage(workspaceId, page);
         log.info("워크스페이스 변경 알림 시작 - workspaceId: {}, page: {}", workspaceId, page);
